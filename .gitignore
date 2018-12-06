@@ -10,7 +10,6 @@ dist
 build
 eggs
 parts
-bin
 var
 sdist
 develop-eggs
@@ -26,6 +25,8 @@ pip-log.txt
 .coverage
 .tox
 nosetests.xml
+test_cases/.cache/
+test_cases/htmlcov/
 
 # Translations
 *.mo
@@ -34,3 +35,37 @@ nosetests.xml
 .mr.developer.cfg
 .project
 .pydevproject
+pushReports.py
+*.swp
+
+# Tests nodejs
+node_modules
+
+# Couch
+.couchadmin
+
+# Ignore faraday server pid
+server/.faraday-server.pid
+
+#Ignore images executive report
+reports/executive/images/ease-of-resolution-piechart.png
+reports/executive/images/impact-piechart.png
+reports/executive/images/vulns-piechart.png
+
+#Ignore visual studio code configs
+typings/
+jsconfig.json
+.vscode/
+
+# PyCharm project files
+.idea
+
+# vFeed DB
+data/vfeed.db
+
+# Images based on DB Schema
+entity_dbschema.png
+uml_schema.png
+
+# Documentation builds
+doc/_build/

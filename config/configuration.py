@@ -1,23 +1,28 @@
 '''
-Faraday Penetration Test IDE - Community Version
+Faraday Penetration Test IDE
 Copyright (C) 2013  Infobyte LLC (http://www.infobytesec.com/)
 See the file 'doc/LICENSE' for the license information
 
 '''
-import sys, os, string, ast, json
+import os
+import json
+import shutil
+
 
 try:
     import xml.etree.cElementTree as ET
-    from xml.etree.cElementTree import Element, ElementTree, dump
+    from xml.etree.cElementTree import Element, ElementTree
 except ImportError:
     import xml.etree.ElementTree as ET
-    from xml.etree.ElementTree import Element, ElementTree, dump
-    
+    from xml.etree.ElementTree import Element, ElementTree
+
+
 the_config = None
-    
+
 CONST_API_CON_INFO = "api_con_info"
 CONST_API_CON_INFO_HOST = "api_con_info_host"
 CONST_API_CON_INFO_PORT = "api_con_info_port"
+CONST_API_RESTFUL_CON_INFO_PORT = "api_restful_con_info_port"
 CONST_APPNAME = "appname"
 CONST_AUTH = "auth"
 CONST_AUTO_SHARE_WORKSPACE = "auto_share_workspace"
@@ -37,6 +42,9 @@ CONST_NETWORK_LOCATION = "network_location"
 CONST_PERSISTENCE_PATH = "persistence_path"
 CONST_PERSPECTIVE_VIEW = "perspective_view"
 CONST_REPO_PASSWORD = "repo_password"
+CONST_API_URL = "api_url"
+CONST_API_USERNAME = "api_username"
+CONST_API_PASSWORD = "api_password"
 CONST_COUCH_URI = "couch_uri"
 CONST_COUCH_REPLICS = "couch_replics"
 CONST_COUCH_ISREPLICATED = "couch_is_replicated"
@@ -45,34 +53,36 @@ CONST_REPO_USER = "repo_user"
 CONST_REPORT_PATH = "report_path"
 CONST_SHELL_MAXIMIZED = "shell_maximized"
 CONST_VERSION = "version"
+CONST_UPDATEURI = "updates_uri"
 CONST_TKTURI = "tickets_uri"
 CONST_TKTAPIPARAMS = "tickets_api"
 CONST_TKTTEMPLATE = "tickets_template"
+CONST_OSINT = "osint"
 
 CONST_LAST_WORKSPACE = "last_workspace"
 CONST_PLUGIN_SETTINGS = "plugin_settings"
 
-                                                                
-DEFAULT_XML = os.path.dirname(__file__) +  "/default.xml"
 
- 
+DEFAULT_XML = os.path.dirname(__file__) + "/default.xml"
+
+
 class Configuration:
 
     def __init__(self, xml_file=DEFAULT_XML):
         """ Initializer that handles a configuration automagically. """
 
         self.filepath = xml_file
+        self._api_con_info = ''
 
-        if self._isConfig(): self._getConfig()
+        if self._isConfig():
+            self._getConfig()
 
-                                                               
-    
     def _isConfig(self):
-        """ Checks whether the given file exists and belongs 
+        """ Checks whether the given file exists and belongs
         to faraday's configuration syntax"""
 
         root = f = None
-        
+
         try:
             f = open(self.filepath, 'rb')
             try:
@@ -86,9 +96,10 @@ class Configuration:
         except IOError, err:
             print "Error while opening file.\n%s. %s" % (err, self.filepath)
             return False
-            
+
         finally:
-            if f: f.close()
+            if f:
+                f.close()
 
         return (root == "faraday")
 
@@ -103,7 +114,7 @@ class Configuration:
             return None
         return tree
 
-    def _getValue(self, tree, var, default = None):
+    def _getValue(self, tree, var, default=None):
         """ Returns generic value from a variable on an XML tree. """
 
         elem = tree.findall(var)
@@ -111,23 +122,16 @@ class Configuration:
             return default
 
         return elem[0].text
-        
-                                   
-                                                                       
- 
-                                 
-                            
 
     def _getConfig(self):
         """ Gathers all configuration data from self.filepath, and
             completes private attributes with such information. """
 
         tree = self._getTree()
-        if tree:                                                          
-                                                                   
-                                                              
+        if tree:
             self._api_con_info_host = self._getValue(tree, CONST_API_CON_INFO_HOST)
             self._api_con_info_port = self._getValue(tree, CONST_API_CON_INFO_PORT)
+            self._api_restful_con_info_port = self._getValue(tree, CONST_API_RESTFUL_CON_INFO_PORT)
             self._api_con_info = self._getValue(tree, CONST_API_CON_INFO)
             self._appname = self._getValue(tree, CONST_APPNAME)
             self._auth = self._getValue(tree, CONST_AUTH)
@@ -148,6 +152,9 @@ class Configuration:
             self._persistence_path = self._getValue(tree, CONST_PERSISTENCE_PATH)
             self._perspective_view = self._getValue(tree, CONST_PERSISTENCE_PATH)
             self._repo_password = self._getValue(tree, CONST_REPO_PASSWORD)
+            self._api_url = self._getValue(tree, CONST_API_URL)
+            self._api_username = self._getValue(tree, CONST_API_USERNAME)
+            self._api_password = self._getValue(tree, CONST_API_PASSWORD)
             self._couch_uri = self._getValue(tree, CONST_COUCH_URI, default = "")
             self._couch_replics = self._getValue(tree, CONST_COUCH_REPLICS, default = "")
             self._couch_is_replicated = bool(self._getValue(tree, CONST_COUCH_ISREPLICATED, default = False))
@@ -158,25 +165,41 @@ class Configuration:
             self._version = self._getValue(tree, CONST_VERSION)
             self._last_workspace = self._getValue(tree, CONST_LAST_WORKSPACE, default = "untitled")
             self._plugin_settings = json.loads(self._getValue(tree, CONST_PLUGIN_SETTINGS, default = "{}"))
+            self._osint = json.loads(self._getValue(tree, CONST_OSINT, default = "{\"host\": \"shodan.io\",\"icon\": \"shodan\",\"label\": \"Shodan\", \"prefix\": \"/search?query=\", \"suffix\": \"\", \"use_external_icon\": false}"))
 
+            self._db_user = ""
+            self._session_cookies = {}
+
+            self._updates_uri = self._getValue(tree, CONST_UPDATEURI, default = "https://www.faradaysec.com/scripts/updates.php")
             self._tkts_uri = self._getValue(tree, CONST_TKTURI,default = "https://www.faradaysec.com/scripts/listener.php")
             self._tkt_api_params = self._getValue(tree, CONST_TKTAPIPARAMS,default ="{}")
             self._tkt_template = self._getValue(tree, CONST_TKTTEMPLATE,default ="{}")
 
+            self._merge_strategy = None
 
-                        
     def getApiConInfo(self):
         if str(self._api_con_info_host) == "None" or str(self._api_con_info_port) == "None":
             return None
         return self._api_con_info_host, int(self._api_con_info_port)
-                                  
-    
+
+    def getApiRestfulConInfo(self):
+        if str(self._api_con_info_host) == "None" or str(self._api_restful_con_info_port) == "None":
+            return None
+        return self._api_con_info_host, int(self._api_restful_con_info_port)
+
     def getApiConInfoHost(self):
         return self._api_con_info_host
-    
+
     def getApiConInfoPort(self):
-        return self._api_con_info_port
-    
+        if str(self._api_con_info_port) == "None":
+            return None
+        return int(self._api_con_info_port)
+
+    def getApiRestfulConInfoPort(self):
+        if str(self._api_restful_con_info_port) == "None":
+            return None
+        return int(self._api_restful_con_info_port)
+
     def getAppname(self):
         return self._appname
 
@@ -200,7 +223,7 @@ class Configuration:
 
     def getDefaultTempPath(self):
         return os.path.expanduser(self._default_temp_path)
-    
+
     def getFont(self):
         return self._font
 
@@ -231,14 +254,14 @@ class Configuration:
     def getPerspectiveView(self):
         return self._perspective_view
 
-    def getCouchURI(self):
-        return self._couch_uri
+    def getServerURI(self):
+        return self._api_url
 
-    def getCouchReplics(self):
-        return self._couch_replics
+    def getDBSessionCookies(self):
+        return self._session_cookies
 
-    def getCouchIsReplicated(self):
-        return self._couch_is_replicated
+    def getDBUser(self):
+        return self._db_user
 
     def getRepoPassword(self):
         return self._repo_password
@@ -264,6 +287,12 @@ class Configuration:
     def getPluginSettings(self):
         return self._plugin_settings
 
+    def getOsint(self):
+        return self._osint
+
+    def getUpdatesUri(self):
+        return self._updates_uri
+
     def getTktPostUri(self):
         return self._tkts_uri
 
@@ -273,7 +302,29 @@ class Configuration:
     def getTktTemplate(self):
         return self._tkt_template
 
-                        
+    def getMergeStrategy(self):
+        return self._merge_strategy
+
+    def getAPIUrl(self):
+        return self._api_url
+
+    def getAPIUsername(self):
+        return self._api_username
+
+    def getAPIPassword(self):
+        return self._api_password
+
+    def getCouchURI(self):
+        if self._couch_uri and self._couch_uri.endswith('/'):
+            return self._couch_uri[:-1]
+        else:
+            return self._couch_uri
+
+    def getCouchReplics(self):
+        return self._couch_replics
+
+    def getCouchIsReplicated(self):
+        return self._couch_is_replicated
 
     def setLastWorkspace(self, workspaceName):
         self._last_workspace = workspaceName
@@ -282,13 +333,21 @@ class Configuration:
         self._api_con_info = val1, val2
         self.setApiConInfoHost(val1)
         self.setApiConInfoPort(val2)
-        
+
+    def setApiRestfulConInfo(self, val1, val2):
+        self._api_con_info = val1, val2
+        self.setApiConInfoHost(val1)
+        self.setApiRestfulConInfoPort(val2)
+
     def setApiConInfoHost(self, val):
         self._api_con_info_host = val
-    
+
     def setApiConInfoPort(self, val):
         self._api_con_info_port = str(val)
-    
+
+    def setApiRestfulConInfoPort(self, val):
+        self._api_restful_con_info_port = str(val)
+
     def setAppname(self, val):
         self._appname = val
 
@@ -312,7 +371,7 @@ class Configuration:
 
     def setDefaultTempPath(self, val):
         self._default_temp_path = val
-    
+
     def setFont(self, val):
         self._font = val
 
@@ -343,6 +402,12 @@ class Configuration:
     def setPerspectiveView(self, val):
         self._perspective_view = val
 
+    def setDBSessionCookies(self, val=None):
+        self._session_cookies = val
+
+    def setDBUser(self, val=None):
+        self._db_user = val
+
     def setRepoPassword(self, val):
         self._repo_password = val
 
@@ -361,7 +426,16 @@ class Configuration:
     def setVersion(self, val):
         self._version = val
 
-    def setCouchUri(self, uri): 
+    def setAPIUrl(self, url):
+        self._api_url = url
+
+    def setAPIUsername(self, username):
+        self._api_username = username
+
+    def setAPIPassword(self, password):
+        self._api_password = password
+
+    def setCouchUri(self, uri):
         self._couch_uri = uri
 
     def setCouchIsReplicated(self, is_it):
@@ -372,7 +446,13 @@ class Configuration:
 
     def setPluginSettings(self, settings):
         self._plugin_settings = settings
-    
+
+    def setOsint(self, config):
+        self._osint = config
+
+    def setMergeStrategy(self, strategy):
+        self._merge_strategy = strategy
+
     def indent(self, elem, level=0):
         """ Indents the tree to make a pretty view of it. """
 
@@ -390,20 +470,28 @@ class Configuration:
             if level and (not elem.tail or not elem.tail.strip()):
                 elem.tail = i
 
-
     def saveConfig(self, xml_file="~/.faraday/config/user.xml"):
         """ Saves XML config on new file. """
 
         ROOT = Element("faraday")
-        
+
+        tree = self._getTree()
+
         API_CON_INFO_HOST = Element(CONST_API_CON_INFO_HOST)
+        #API_CON_INFO_HOST.text = self._getValue(tree, CONST_API_CON_INFO_HOST)
         API_CON_INFO_HOST.text = self.getApiConInfoHost()
         ROOT.append(API_CON_INFO_HOST)
-        
+
         API_CON_INFO_PORT = Element(CONST_API_CON_INFO_PORT)
+        #API_CON_INFO_PORT.text = self._getValue(tree, CONST_API_CON_INFO_PORT)
         API_CON_INFO_PORT.text = str(self.getApiConInfoPort())
         ROOT.append(API_CON_INFO_PORT)
-        
+
+        API_RESTFUL_CON_INFO_PORT = Element(CONST_API_RESTFUL_CON_INFO_PORT)
+        #API_RESTFUL_CON_INFO_PORT.text = self._getValue(tree, CONST_API_RESTFUL_CON_INFO_PORT)
+        API_RESTFUL_CON_INFO_PORT.text = str(self.getApiRestfulConInfoPort())
+        ROOT.append(API_RESTFUL_CON_INFO_PORT)
+
         APPNAME = Element(CONST_APPNAME)
         APPNAME.text = self.getAppname()
         ROOT.append(APPNAME)
@@ -443,7 +531,6 @@ class Configuration:
         HOME_PATH = Element(CONST_HOME_PATH)
         HOME_PATH.text = self.getHomePath()
         ROOT.append(HOME_PATH)
-
 
         HOST_TREE_TOGGLE = Element(CONST_HOST_TREE_TOGGLE)
         HOST_TREE_TOGGLE.text = self.getHostTreeToggle()
@@ -501,6 +588,18 @@ class Configuration:
         LAST_WORKSPACE.text = self.getLastWorkspace()
         ROOT.append(LAST_WORKSPACE)
 
+        SERVER_URL = Element(CONST_API_URL)
+        SERVER_URL.text = self.getServerURI()
+        ROOT.append(SERVER_URL)
+
+        SERVER_USERNAME = Element(CONST_API_USERNAME)
+        SERVER_USERNAME.text = self.getAPIUsername()
+        ROOT.append(SERVER_USERNAME)
+
+        SERVER_PASSWORD = Element(CONST_API_PASSWORD)
+        SERVER_PASSWORD.text = self.getAPIPassword()
+        ROOT.append(SERVER_PASSWORD)
+
         COUCH_URI = Element(CONST_COUCH_URI)
         COUCH_URI.text = self.getCouchURI()
         ROOT.append(COUCH_URI)
@@ -521,6 +620,14 @@ class Configuration:
         PLUGIN_SETTINGS.text = json.dumps(self.getPluginSettings())
         ROOT.append(PLUGIN_SETTINGS)
 
+        OSINT = Element(CONST_OSINT)
+        OSINT.text = json.dumps(self.getOsint())
+        ROOT.append(OSINT)
+
+        UPDATE_URI = Element(CONST_UPDATEURI)
+        UPDATE_URI.text = self.getUpdatesUri()
+        ROOT.append(UPDATE_URI)
+
         TKT_URI = Element(CONST_TKTURI)
         TKT_URI.text = self.getTktPostUri()
         ROOT.append(TKT_URI)
@@ -533,33 +640,22 @@ class Configuration:
         TKT_TEMPLATE.text = self.getTktTemplate()
         ROOT.append(TKT_TEMPLATE)
 
-        self.indent(ROOT, 0)                         
-        dump(ROOT)                                        
+        self.indent(ROOT, 0)
         xml_file = os.path.expanduser(xml_file)
-        ElementTree(ROOT).write(xml_file)                                      
-        
+        ElementTree(ROOT).write(xml_file)
+
+
 def getInstanceConfiguration():
     global the_config
     if the_config is None:
-                                                                          
-                                              
-                                                                                              
+        config_dir = os.path.expanduser("~/.faraday/config")
+        if not os.path.exists(config_dir):
+            os.mkdir(config_dir)
+        faraday_user_config = os.path.expanduser("~/.faraday/config/user.xml")
+        if not os.path.isfile(faraday_user_config):
+            shutil.copy(DEFAULT_XML, faraday_user_config)
         if os.path.exists(os.path.expanduser("~/.faraday/config/user.xml")):
             the_config = Configuration(os.path.expanduser("~/.faraday/config/user.xml"))
         else:
             the_config = Configuration(os.path.expanduser("~/.faraday/config/config.xml"))
-        
     return the_config
-
-
-                           
-                                     
- 
-                                     
-                                 
-
-                                          
-                                         
-                                                            
-                                                                
-                                                              
